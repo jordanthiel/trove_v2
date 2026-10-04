@@ -12,9 +12,18 @@ serve(async (req) => {
   }
 
   try {
+    const authorization = req.headers.get('Authorization')
+    const authResponse = authorization ? await fetch(`${Deno.env.get('SUPABASE_URL')}/auth/v1/user`, {
+      headers: { Authorization: authorization, apikey: Deno.env.get('SUPABASE_ANON_KEY')! },
+    }) : null
+    if (!authResponse?.ok) {
+      return new Response(JSON.stringify({ error: 'Authentication required' }), {
+        status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      })
+    }
     const { link, message, conversationHistory = [] } = await req.json()
     
-    const openAIApiKey = Deno.env.get('OPEN_AI_API_KEY')
+    const openAIApiKey = Deno.env.get('OPENAI_API_KEY') ?? Deno.env.get('OPEN_AI_API_KEY')
     if (!openAIApiKey) {
       return new Response(
         JSON.stringify({ error: 'OpenAI API key not configured' }),
