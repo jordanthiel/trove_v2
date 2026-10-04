@@ -1,0 +1,8 @@
+.env
+.env.*
+!.env.example
+Trove/Configuration.plist
+build/
+*.xcuserstate
+xcuserdata/
+.DS_Store

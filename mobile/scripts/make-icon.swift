@@ -1,0 +1,17 @@
+import AppKit
+let rep = NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: 1024, pixelsHigh: 1024, bitsPerSample: 8, samplesPerPixel: 3, hasAlpha: false, isPlanar: false, colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0)!
+NSGraphicsContext.saveGraphicsState()
+NSGraphicsContext.current = NSGraphicsContext(bitmapImageRep: rep)
+NSColor(red: 0.16, green: 0.36, blue: 0.30, alpha: 1).setFill()
+NSBezierPath(rect: NSRect(x: 0,y: 0,width: 1024,height: 1024)).fill()
+NSColor(red: 0.97, green: 0.96, blue: 0.92, alpha: 1).setFill()
+NSBezierPath(roundedRect: NSRect(x: 245,y: 245,width: 534,height: 375), xRadius: 40,yRadius: 40).fill()
+NSBezierPath(roundedRect: NSRect(x: 213,y: 600,width: 598,height: 100), xRadius: 26,yRadius: 26).fill()
+NSColor(red: 0.94, green: 0.79, blue: 0.64, alpha: 1).setFill()
+NSBezierPath(rect: NSRect(x: 473,y: 245,width: 78,height: 455)).fill()
+let bow = NSBezierPath()
+bow.move(to: NSPoint(x:512,y:700)); bow.curve(to:NSPoint(x:345,y:770), controlPoint1:NSPoint(x:365,y:700),controlPoint2:NSPoint(x:303,y:726)); bow.curve(to:NSPoint(x:512,y:700),controlPoint1:NSPoint(x:375,y:852),controlPoint2:NSPoint(x:482,y:821))
+bow.move(to:NSPoint(x:512,y:700)); bow.curve(to:NSPoint(x:679,y:770),controlPoint1:NSPoint(x:659,y:700),controlPoint2:NSPoint(x:721,y:726)); bow.curve(to:NSPoint(x:512,y:700),controlPoint1:NSPoint(x:649,y:852),controlPoint2:NSPoint(x:542,y:821))
+bow.lineWidth = 38; bow.lineCapStyle = .round; NSColor(red:0.94,green:0.79,blue:0.64,alpha:1).setStroke(); bow.stroke()
+NSGraphicsContext.restoreGraphicsState()
+try rep.representation(using:.png,properties:[:])!.write(to:URL(fileURLWithPath:CommandLine.arguments[1]))
