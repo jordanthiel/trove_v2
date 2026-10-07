@@ -1,5 +1,22 @@
 import Foundation
 
+/// Amazon shares may contain a product title and a short URL on separate lines.
+enum ProductLink {
+    static func extract(_ input: String) -> String? {
+        let text = input.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !text.isEmpty else { return nil }
+        if let url = URL(string: text), ProductPageLoader.allowed(url), !text.contains(where: { $0.isWhitespace }) {
+            return url.absoluteString
+        }
+        guard let detector = try? NSDataDetector(types: NSTextCheckingResult.CheckingType.link.rawValue) else { return nil }
+        let matches = detector.matches(in: text, range: NSRange(text.startIndex..., in: text))
+        for match in matches {
+            if let url = match.url, ProductPageLoader.allowed(url) { return url.absoluteString }
+        }
+        return nil
+    }
+}
+
 /// Some stores reject cloud traffic but allow previews from a user's device.
 /// Uses a separate ephemeral session with no cookies or Supabase credentials.
 final class ProductPageLoader: NSObject, URLSessionTaskDelegate, @unchecked Sendable {
@@ -11,7 +28,7 @@ final class ProductPageLoader: NSObject, URLSessionTaskDelegate, @unchecked Send
         return !forbidden.contains(where: host.hasSuffix) && host.split(separator: ".").contains(where: { Int($0) == nil })
     }
     static func productURL(_ link: String) -> URL? {
-        guard let url = URL(string: link), allowed(url) else { return nil }
+        guard let normalized = ProductLink.extract(link), let url = URL(string: normalized), allowed(url) else { return nil }
         guard let host = url.host, host.range(of: #"(^|\.)amazon\.(com|ca|co\.uk|com\.au|de|fr|it|es|co\.jp|in|com\.mx)$"#, options: .regularExpression) != nil,
               let match = url.path.range(of: #"/(?:dp|gp/product|gp/aw/d)/[A-Za-z0-9]{10}(?=/|$)"#, options: .regularExpression),
               let asin = url.path[match].split(separator: "/").last,

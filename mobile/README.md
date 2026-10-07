@@ -50,6 +50,10 @@ Function tests: `deno test --no-config --no-lock ../supabase/functions/product-p
 
 ### App Store archives
 
-Marketing version and build number are set in the Xcode target settings (`MARKETING_VERSION` and `CURRENT_PROJECT_VERSION`); `Info.plist` resolves those values when building. Current release: 1.1.0 (2026100301). Increment the build number for each upload. Both configurations and the project generator use the same values. iPad supports all four orientations for multitasking; iPhone uses portrait.
+Marketing version and build number are set in the Xcode target settings (`MARKETING_VERSION` and `CURRENT_PROJECT_VERSION`); `Info.plist` resolves those values when building. Current release: 1.1.1 (2026100701). Increment the build number for each upload. Both configurations and the project generator use the same values. iPad supports all four orientations for multitasking; iPhone uses portrait.
 
 Create a new archive after changing these values. Existing archives retain their original bundle metadata and cannot be fixed by editing the project afterward.
+
+Amazon share text containing a product title and URL is normalized to the URL before import and save. Title-only input shows instructions to copy the link or save without one.
+
+Run link normalization checks with `swiftc -parse-as-library Trove/Models.swift Trove/ProductPageLoader.swift Tests/ProductLinkTests.swift -o /tmp/TroveLinkTests && /tmp/TroveLinkTests`.

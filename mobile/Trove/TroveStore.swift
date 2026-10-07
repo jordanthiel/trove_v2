@@ -69,16 +69,18 @@ final class TroveStore: ObservableObject {
         try await refresh()
     }
     func saveItem(list: WishList, existing: GiftItem?, name: String, notes: String, link: String, price: String, imageURL: String) async throws {
-        var values: [String: Any] = ["name": name.trimmingCharacters(in: .whitespacesAndNewlines), "description": notes.isEmpty ? NSNull() : notes as Any, "link": link.isEmpty ? NSNull() : link as Any]
+        let input = link.trimmingCharacters(in: .whitespacesAndNewlines)
+        let normalizedLink = ProductLink.extract(input)
+        if !input.isEmpty && normalizedLink == nil {
+            throw APIError(message: "No website link found. Use Amazon’s Share → Copy Link, or clear the link field to save this wish without a link.")
+        }
+        var values: [String: Any] = ["name": name.trimmingCharacters(in: .whitespacesAndNewlines), "description": notes.isEmpty ? NSNull() : notes as Any, "link": normalizedLink.map { $0 as Any } ?? NSNull()]
         values["image_url"] = imageURL.isEmpty ? NSNull() : imageURL as Any
         let normalizedPrice = price.trimmingCharacters(in: .whitespacesAndNewlines)
         if normalizedPrice.isEmpty { values["price"] = NSNull() }
         else {
             guard let amount = Decimal(string: normalizedPrice.replacingOccurrences(of: ",", with: ".")), amount >= 0, amount < 100_000_000 else { throw APIError(message: "Enter a valid price, such as 29.99.") }
             values["price"] = NSDecimalNumber(decimal: amount)
-        }
-        if !link.isEmpty {
-            guard let url = URL(string: link), ["http", "https"].contains(url.scheme?.lowercased() ?? ""), url.host != nil else { throw APIError(message: "Enter a full product link beginning with https://.") }
         }
         if let existing { try await client.update("list_items", id: existing.id, values: values) }
         else { values["list_id"] = list.id.uuidString; try await client.insert("list_items", values: values) }

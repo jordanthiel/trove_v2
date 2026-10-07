@@ -137,6 +137,9 @@ struct ItemEditorView: View {
                     TextField("Paste a product link", text: $link).keyboardType(.URL)
                         .textInputAutocapitalization(.never).autocorrectionDisabled()
                         .accessibilityIdentifier("item.link")
+                    if !link.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && validLink == nil {
+                        Text("No website link found. In Amazon, tap Share → Copy Link, then paste it here. Or clear this field to add your wish without a link.").font(.caption).foregroundStyle(TroveStyle.muted)
+                    }
                     if importing { Label { Text("Finding product details…") } icon: { ProgressView() } }
                     if let importMessage {
                         Text(importMessage).font(.caption).foregroundStyle(importFailed ? TroveStyle.muted : TroveStyle.green)
@@ -185,14 +188,14 @@ struct ItemEditorView: View {
                     do { try await Task.sleep(for: .milliseconds(750)) } catch { return }
                     await importProduct()
                 }
-                .onChange(of: link) { _, _ in importMessage = nil; importing = false; importRequestID = nil }
+                .onChange(of: link) { _, value in
+                    importMessage = nil; importing = false; importRequestID = nil
+                    if let extracted = ProductLink.extract(value), extracted != value { link = extracted }
+                }
         }.interactiveDismissDisabled(busy)
     }
     private var validLink: String? {
-        let trimmed = link.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard let url = URL(string: trimmed), ["http","https"].contains(url.scheme?.lowercased() ?? ""),
-            let host = url.host, host.contains(".") else { return nil }
-        return trimmed
+        ProductLink.extract(link)
     }
     private func userField(_ field: Binding<String>) -> Binding<String> {
         Binding(get: { field.wrappedValue }, set: { value in field.wrappedValue = value; manualRevision += 1 })
