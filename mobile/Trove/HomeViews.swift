@@ -108,10 +108,10 @@ struct ThankYouView: View {
                 if received.isEmpty { EmptyCard(icon: "heart", title: "Thank-you notes come later", message: "Received gifts will appear here after your celebrations. Enjoy the anticipation.") }
                 ForEach(received) { item in
                     VStack(alignment: .leading, spacing: 12) {
-                        Label(item.purchaser_name ?? "A thoughtful friend", systemImage: "heart.fill").font(.headline).foregroundStyle(TroveStyle.green)
+                        Label(item.purchaserSummary, systemImage: "heart.fill").font(.headline).foregroundStyle(TroveStyle.green)
                         Text(item.name).font(.title3.weight(.medium))
                         if let list = store.lists.first(where: { $0.id == item.list_id }) { Text(list.name).font(.caption).foregroundStyle(TroveStyle.muted) }
-                        ShareLink(item: "Thank you, \(item.purchaser_name ?? "my friend"), for the \(item.name)! It was so thoughtful of you.") {
+                        ShareLink(item: "Thank you, \(item.purchaserSummary), for the \(item.name)! It was so thoughtful of you.") {
                             Label("Share a thank-you", systemImage: "square.and.arrow.up").font(.subheadline.weight(.semibold))
                         }
                     }.frame(maxWidth: .infinity, alignment: .leading).padding(22).background(.white, in: RoundedRectangle(cornerRadius: 22))

@@ -61,6 +61,7 @@ struct ListDetailView: View {
     @Environment(\.dismiss) private var dismiss
     let list: WishList
     @State private var adding = false
+    @State private var claiming: GiftItem?
     @State private var editing: GiftItem?
     @State private var sharing = false
     @State private var deleting = false
@@ -90,7 +91,7 @@ struct ListDetailView: View {
                 ForEach(store.items(for: list)) { item in
                     GiftCard(item: item, owned: owned, currentUser: store.userID, busy: workingID == item.id,
                              canClaim: store.events(for: list).contains { !$0.hasPassed },
-                             edit: { editing = item }, claim: { changeClaim(item) }, remove: { remove(item) })
+                             edit: { editing = item }, claim: { claiming = item }, remove: { remove(item) })
                 }
                 if owned {
                     PrimaryButton(title: "Add a wish", icon: "plus") { adding = true }
@@ -100,16 +101,13 @@ struct ListDetailView: View {
         }.navigationTitle(list.name).troveScreen().refreshable { await store.reload() }
             .toolbar { if owned { Button { adding = true } label: { Image(systemName: "plus") }.accessibilityLabel("Add an item") } }
             .sheet(isPresented: $adding) { ItemEditorView(list: list, item: nil) }
+            .sheet(item: $claiming) { item in ClaimQuantityView(item: item) }
             .sheet(item: $editing) { item in ItemEditorView(list: list, item: item) }
             .sheet(isPresented: $sharing) { ShareEventsView(list: list) }
             .errorAlert($error)
             .confirmationDialog("Delete this list and all its items? It will be removed from every event.", isPresented: $deleting, titleVisibility: .visible) {
                 Button("Delete wish list", role: .destructive) { Task { do { try await store.deleteList(list); dismiss() } catch { self.error = error.localizedDescription } } }
             }
-    }
-    private func changeClaim(_ item: GiftItem) {
-        workingID = item.id
-        Task { defer { workingID = nil }; do { try await store.claim(item, claim: !item.is_purchased) } catch { self.error = error.localizedDescription; await store.reload() } }
     }
     private func remove(_ item: GiftItem) {
         workingID = item.id
@@ -126,7 +124,7 @@ struct GiftCard: View {
     let claim: () -> Void
     let remove: () -> Void
     @State private var deleting = false
-    @State private var undoing = false
+    @State private var expanded = false
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
             HStack(alignment: .top, spacing: 14) {
@@ -143,23 +141,81 @@ struct GiftCard: View {
                     } label: { Image(systemName: "ellipsis").padding(8) }.accessibilityLabel("Item options")
                 }
             }
-            if let notes = item.description, !notes.isEmpty { Text(notes).font(.subheadline).foregroundStyle(TroveStyle.muted).lineSpacing(3) }
+            if let notes = item.description, !notes.isEmpty {
+                Text(notes).font(.subheadline).foregroundStyle(TroveStyle.muted).lineSpacing(3)
+                    .lineLimit(expanded ? nil : 3).truncationMode(.tail)
+                if notes.count > 120 || notes.contains("\n") {
+                    Button(expanded ? "Show less" : "Show more") { expanded.toggle() }.font(.caption.weight(.medium))
+                }
+            }
+            Text("Quantity wanted: \(item.requestedQuantity)").font(.subheadline.weight(.medium))
             if let link = item.link, let url = URL(string: link), ["https", "http"].contains(url.scheme ?? "") {
                 Link(destination: url) { Label("View product", systemImage: "arrow.up.right").font(.subheadline.weight(.medium)) }
             }
-            if item.is_purchased {
-                Label(item.purchased_by_user_id == currentUser ? "You’ve claimed this gift" : "Claimed by \(item.purchaser_name ?? "another member")", systemImage: "checkmark.circle.fill")
-                    .font(.caption.weight(.semibold)).foregroundStyle(TroveStyle.green)
-                if !owned && item.purchased_by_user_id == currentUser {
-                    Button { undoing = true } label: { if busy { ProgressView() } else { Text("Undo my claim").font(.caption.weight(.medium)) } }.disabled(busy)
+            if !owned || !item.purchase_hidden {
+                Text("\(item.remainingQuantity) of \(item.requestedQuantity) still available")
+                    .font(.subheadline.weight(.semibold)).foregroundStyle(TroveStyle.green)
+                if let buyers = item.purchasers {
+                    ForEach(buyers, id: \.user_id) { buyer in
+                        Label(buyer.user_id == currentUser ? "You claimed \(buyer.quantity)" : "\(buyer.name) claimed \(buyer.quantity)", systemImage: "checkmark.circle.fill")
+                            .font(.caption).foregroundStyle(TroveStyle.green)
+                    }
                 }
-            } else if !owned {
-                if canClaim {
+            }
+            if !owned {
+                if item.myQuantity > 0 {
+                    Button("Change my claim (\(item.myQuantity))", action: claim).disabled(busy)
+                } else if canClaim && item.remainingQuantity > 0 {
                     PrimaryButton(title: "I purchased this", icon: "checkmark", busy: busy, action: claim)
-                } else { Text("This celebration has passed.").font(.caption).foregroundStyle(TroveStyle.muted) }
+                } else if !canClaim {
+                    Text("This celebration has passed.").font(.caption).foregroundStyle(TroveStyle.muted)
+                }
             }
         }.padding(20).background(.white, in: RoundedRectangle(cornerRadius: 22))
             .confirmationDialog("Delete \(item.name)?", isPresented: $deleting, titleVisibility: .visible) { Button("Delete item", role: .destructive, action: remove) }
-            .confirmationDialog("Make this gift available for someone else to purchase?", isPresented: $undoing, titleVisibility: .visible) { Button("Undo my claim", action: claim) }
+
+    }
+}
+
+struct ClaimQuantityView: View {
+    @EnvironmentObject var store: TroveStore
+    @Environment(\.dismiss) private var dismiss
+    let item: GiftItem
+    @State private var quantity: Int
+    @State private var busy = false
+    @State private var error: String?
+    init(item: GiftItem) {
+        self.item = item
+        _quantity = State(initialValue: item.myQuantity > 0 ? item.myQuantity : 1)
+    }
+    var current: GiftItem { store.items.first { $0.id == item.id } ?? item }
+    var maximum: Int {
+        let available = current.remainingQuantity + current.myQuantity
+        let active = store.events.contains { event in store.links.contains { $0.list_id == current.list_id && $0.event_id == event.id } && !event.hasPassed }
+        return active ? available : current.myQuantity
+    }
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section(item.name) {
+                    Text("\(current.remainingQuantity) still available. You have claimed \(current.myQuantity).")
+                    Stepper("I purchased: \(quantity)", value: $quantity, in: 0...max(0, maximum))
+                    Text("Choose how many you purchased. Set this to zero to release your claim.").font(.caption)
+                }
+                Section {
+                    Button {
+                        busy = true
+                        Task {
+                            defer { busy = false }
+                            do { try await store.claim(current, quantity: quantity); dismiss() }
+                            catch { self.error = error.localizedDescription; await store.reload() }
+                        }
+                    } label: { if busy { ProgressView() } else { Text(quantity == 0 ? "Release my claim" : "Save my claim") } }
+                    .disabled(busy || quantity > maximum || (quantity == 0 && current.myQuantity == 0))
+                }
+            }.navigationTitle("Claim quantity").navigationBarTitleDisplayMode(.inline)
+                .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() }.disabled(busy) } }
+                .errorAlert($error)
+        }.interactiveDismissDisabled(busy)
     }
 }

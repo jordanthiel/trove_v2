@@ -68,13 +68,15 @@ final class TroveStore: ObservableObject {
         }
         try await refresh()
     }
-    func saveItem(list: WishList, existing: GiftItem?, name: String, notes: String, link: String, price: String, imageURL: String) async throws {
+    func saveItem(list: WishList, existing: GiftItem?, name: String, notes: String, link: String, price: String, imageURL: String, quantity: Int) async throws {
+        guard (1...999).contains(quantity) else { throw APIError(message: "Choose a quantity from 1 to 999.") }
         let input = link.trimmingCharacters(in: .whitespacesAndNewlines)
         let normalizedLink = ProductLink.extract(input)
         if !input.isEmpty && normalizedLink == nil {
             throw APIError(message: "No website link found. Use Amazon’s Share → Copy Link, or clear the link field to save this wish without a link.")
         }
         var values: [String: Any] = ["name": name.trimmingCharacters(in: .whitespacesAndNewlines), "description": notes.isEmpty ? NSNull() : notes as Any, "link": normalizedLink.map { $0 as Any } ?? NSNull()]
+        values["quantity"] = quantity
         values["image_url"] = imageURL.isEmpty ? NSNull() : imageURL as Any
         let normalizedPrice = price.trimmingCharacters(in: .whitespacesAndNewlines)
         if normalizedPrice.isEmpty { values["price"] = NSNull() }
@@ -86,8 +88,8 @@ final class TroveStore: ObservableObject {
         else { values["list_id"] = list.id.uuidString; try await client.insert("list_items", values: values) }
         try await refresh()
     }
-    func claim(_ item: GiftItem, claim: Bool) async throws {
-        _ = try await client.rpc("trove_claim_item", values: ["p_item_id": item.id.uuidString, "p_claim": claim])
+    func claim(_ item: GiftItem, quantity: Int) async throws {
+        _ = try await client.rpc("trove_set_claim_quantity", values: ["p_item_id": item.id.uuidString, "p_quantity": quantity])
         try await refresh()
     }
     func deleteItem(_ item: GiftItem) async throws {

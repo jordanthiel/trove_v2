@@ -113,6 +113,7 @@ struct ItemEditorView: View {
     @State private var link: String
     @State private var price: String
     @State private var imageURL: String
+    @State private var quantity: Int
     @State private var lastImportedLink: String
     @State private var importing = false
     @State private var importMessage: String?
@@ -128,6 +129,7 @@ struct ItemEditorView: View {
         _link = State(initialValue: item?.link ?? "")
         _price = State(initialValue: item?.price.map { NSDecimalNumber(decimal: $0).stringValue } ?? "")
         _imageURL = State(initialValue: item?.image_url ?? "")
+        _quantity = State(initialValue: item?.requestedQuantity ?? 1)
         _lastImportedLink = State(initialValue: item?.link ?? "")
     }
     var body: some View {
@@ -161,7 +163,9 @@ struct ItemEditorView: View {
                 }
                 Section("Your wish") {
                     TextField("Item name", text: userField($name)).accessibilityIdentifier("item.name")
-                    TextField("Price in USD (optional)", text: userField($price)).keyboardType(.decimalPad)
+                    TextField("Price per item in USD (optional)", text: userField($price)).keyboardType(.decimalPad)
+                    Stepper("Quantity wanted: \(quantity)", value: $quantity, in: 1...999)
+                    if item != nil { Text("Quantities can be increased at any time. Reductions are available after all shared events have passed.").font(.caption).foregroundStyle(TroveStyle.muted) }
                 }
                 Section("The details") {
                     TextField("Size, color, or anything helpful", text: userField($notes), axis: .vertical).lineLimit(3...6)
@@ -173,7 +177,7 @@ struct ItemEditorView: View {
                             defer { busy = false }
                             do {
                                 try await store.saveItem(list: list, existing: item, name: name, notes: notes,
-                                    link: link.trimmingCharacters(in: .whitespacesAndNewlines), price: price, imageURL: imageURL)
+                                    link: link.trimmingCharacters(in: .whitespacesAndNewlines), price: price, imageURL: imageURL, quantity: quantity)
                                 dismiss()
                             } catch { self.error = error.localizedDescription }
                         }

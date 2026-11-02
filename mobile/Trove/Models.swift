@@ -23,6 +23,7 @@ struct RegistryEvent: Codable, Identifiable, Hashable {
 }
 struct WishList: Codable, Identifiable, Hashable { let id: UUID; let user_id: UUID; var name: String }
 struct EventList: Codable { let event_id: UUID; let list_id: UUID }
+struct GiftPurchaser: Codable { let user_id: UUID; let name: String; let quantity: Int }
 struct GiftItem: Codable, Identifiable {
     let id: UUID
     let list_id: UUID
@@ -36,6 +37,18 @@ struct GiftItem: Codable, Identifiable {
     var is_purchased: Bool
     var purchase_hidden: Bool
     var purchaser_name: String?
+    var quantity: Int?
+    var claimed_quantity: Int?
+    var available_quantity: Int?
+    var my_claimed_quantity: Int?
+    var purchasers: [GiftPurchaser]?
+    var requestedQuantity: Int { quantity ?? 1 }
+    var myQuantity: Int { my_claimed_quantity ?? 0 }
+    var remainingQuantity: Int { available_quantity ?? (is_purchased ? 0 : requestedQuantity) }
+    var purchaserSummary: String {
+        guard let purchasers, !purchasers.isEmpty else { return purchaser_name ?? "a friend" }
+        return purchasers.map { "\($0.name) (\($0.quantity))" }.joined(separator: ", ")
+    }
 }
 struct AuthUser: Codable { let id: UUID; let email: String? }
 struct Session: Codable {

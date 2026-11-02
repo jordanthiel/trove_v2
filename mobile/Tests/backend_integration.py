@@ -60,13 +60,14 @@ try:
   assert status==200,(status,data)
   return data
  item=view(ot)[0]
+ def single(token): return next(row for row in view(token) if row['id']==item['id'])
  assert len(view(gt))==1 and len(view(xt))==0
  def claim(token): return request('/rest/v1/rpc/trove_claim_item',token,'POST',{'p_item_id':item['id'],'p_claim':True})
  with concurrent.futures.ThreadPoolExecutor(max_workers=2) as pool:
   results=list(pool.map(claim,[gt,rt]))
  assert sorted(status for status,_ in results)==[204,400],results
  winner=gt if results[0][0]==204 else rt; loser=rt if winner==gt else gt
- hidden=view(ot)[0]; visible=view(winner)[0]
+ hidden=single(ot); visible=single(winner)
  assert hidden['purchase_hidden'] and not hidden['is_purchased'] and hidden['purchased_by_user_id'] is None and hidden['purchaser_name'] is None
  assert visible['is_purchased'] and visible['purchaser_name'] in ['Guest','Rival']
  status,_=request('/rest/v1/list_items?select=purchased_by_user_id',ot)
@@ -76,18 +77,49 @@ try:
  status,_=request('/rest/v1/rpc/trove_claim_item',loser,'POST',{'p_item_id':item['id'],'p_claim':False})
  assert status==403,'Cannot release another person\'s gift'
  status,_=request('/rest/v1/list_items?id=eq.'+item['id'],gt,'PATCH',{'name':'Tampered'})
- assert status==204 and view(gt)[0]['name']=='Test gift','Guests cannot edit gift details'
+ assert status==204 and single(gt)['name']=='Test gift','Guests cannot edit gift details'
+ # Quantity allocation is atomic across multiple buyers and private from the owner.
+ multi={'id':str(uuid.uuid4())}
+ assert request('/rest/v1/list_items',ot,'POST',{'id':multi['id'],'list_id':wish['id'],'name':'Matching mugs','quantity':5})[0]==201
+ def set_quantity(token,amount):
+  return request('/rest/v1/rpc/trove_set_claim_quantity',token,'POST',{'p_item_id':multi['id'],'p_quantity':amount})
+ def quantity_view(token):
+  return next(row for row in view(token) if row['id']==multi['id'])
+ with concurrent.futures.ThreadPoolExecutor(max_workers=2) as pool:
+  allocations=list(pool.map(lambda t:set_quantity(t,3),[gt,rt]))
+ assert sorted(code for code,_ in allocations)==[204,400],allocations
+ first=gt if allocations[0][0]==204 else rt; other=rt if first==gt else gt
+ assert quantity_view(first)['available_quantity']==2
+ assert set_quantity(other,2)[0]==204
+ visible_quantity=quantity_view(gt)
+ assert visible_quantity['claimed_quantity']==5 and visible_quantity['available_quantity']==0 and len(visible_quantity['purchasers'])==2
+ private_quantity=quantity_view(ot)
+ assert private_quantity['claimed_quantity'] is None and private_quantity['available_quantity'] is None and private_quantity['purchasers']==[]
+ assert set_quantity(ot,1)[0]==403 and set_quantity(xt,1)[0]==403
+ assert set_quantity(first,4)[0]==400
+ assert set_quantity(other,0)[0]==204 and quantity_view(first)['available_quantity']==2
+ assert set_quantity(first,1)[0]==204 and quantity_view(first)['available_quantity']==4
+ assert set_quantity(first,-1)[0]==400 and set_quantity(first,1000)[0]==400
+ assert request('/rest/v1/trove_item_claims?select=*',ot)[0]==403
+ # Reductions during the surprise period fail consistently, even for unclaimed wishes.
+ assert request('/rest/v1/list_items?id=eq.'+multi['id'],ot,'PATCH',{'quantity':4})[0]==400
+ assert request('/rest/v1/list_items?id=eq.'+multi['id'],ot,'PATCH',{'quantity':6})[0]==204
+ assert quantity_view(first)['available_quantity']==5
+ print('PASS: partial quantities, atomic capacity, multiple buyers, release/change, hidden totals, and raw-claim privacy.')
  status,_=request('/rest/v1/events?id=eq.'+event['id'],ot,'PATCH',{'date':past})
- assert status==204 and view(ot)[0]['purchase_hidden'],'Second upcoming event must preserve the surprise'
+ assert status==204 and single(ot)['purchase_hidden'],'Second upcoming event must preserve the surprise'
  status,_=request('/rest/v1/events?id=eq.'+second['id'],ot,'PATCH',{'date':past})
  assert status==204
- assert view(ot)[0]['purchase_hidden'],'Changing event dates cannot reveal an already claimed surprise early'
+ assert single(ot)['purchase_hidden'],'Changing event dates cannot reveal an already claimed surprise early'
  # Simulate the stored deadline passing, using the local service role only.
  status,_=request('/rest/v1/list_items?id=eq.'+item['id'],method='PATCH',body={'claim_reveal_at':past+'T00:00:00Z'},admin=True)
  assert status==204
- revealed=view(ot)[0]; assert revealed['is_purchased'] and not revealed['purchase_hidden'] and revealed['purchaser_name']
+ assert request('/rest/v1/list_items?id=eq.'+multi['id'],method='PATCH',body={'claim_reveal_at':past+'T00:00:00Z'},admin=True)[0]==204
+ revealed_multi=quantity_view(ot)
+ assert revealed_multi['claimed_quantity']==1 and revealed_multi['available_quantity']==5 and len(revealed_multi['purchasers'])==1
+ revealed=single(ot); assert revealed['is_purchased'] and not revealed['purchase_hidden'] and revealed['purchaser_name']
  status,_=request('/rest/v1/rpc/trove_claim_item',winner,'POST',{'p_item_id':item['id'],'p_claim':False})
- assert status==204 and not view(gt)[0]['is_purchased']
+ assert status==204 and not single(gt)['is_purchased']
  status,_=claim(winner)
  assert status==400,'No new claims after a member\'s events end'
  status,_=request('/rest/v1/rpc/join_event_by_code',gt,'POST',{'p_sharing_code':event['sharing_code'],'p_user_id':outsider})
