@@ -111,7 +111,7 @@ struct ThankYouView: View {
                         Label(item.purchaserSummary, systemImage: "heart.fill").font(.headline).foregroundStyle(TroveStyle.green)
                         Text(item.name).font(.title3.weight(.medium))
                         if let list = store.lists.first(where: { $0.id == item.list_id }) { Text(list.name).font(.caption).foregroundStyle(TroveStyle.muted) }
-                        ShareLink(item: "Thank you, \(item.purchaserSummary), for the \(item.name)! It was so thoughtful of you.") {
+                        ShareLink(item: item.anonymous_purchases == true ? "Thank you for the \(item.name)! It was so thoughtful of you." : "Thank you, \(item.purchaserSummary), for the \(item.name)! It was so thoughtful of you.") {
                             Label("Share a thank-you", systemImage: "square.and.arrow.up").font(.subheadline.weight(.semibold))
                         }
                     }.frame(maxWidth: .infinity, alignment: .leading).padding(22).background(.white, in: RoundedRectangle(cornerRadius: 22))

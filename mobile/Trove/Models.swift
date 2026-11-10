@@ -8,6 +8,7 @@ struct RegistryEvent: Codable, Identifiable, Hashable {
     let sharing_code: String
     let owner_id: UUID
     var timezone: String
+    var anonymous_purchases: Bool?
     var eventDate: Date { Self.formatter.date(from: date) ?? Date() }
     var hasPassed: Bool {
         var calendar = Calendar(identifier: .gregorian)
@@ -42,10 +43,13 @@ struct GiftItem: Codable, Identifiable {
     var available_quantity: Int?
     var my_claimed_quantity: Int?
     var purchasers: [GiftPurchaser]?
+    var is_favorite: Bool?
+    var anonymous_purchases: Bool?
     var requestedQuantity: Int { quantity ?? 1 }
     var myQuantity: Int { my_claimed_quantity ?? 0 }
     var remainingQuantity: Int { available_quantity ?? (is_purchased ? 0 : requestedQuantity) }
     var purchaserSummary: String {
+        if anonymous_purchases == true { return "Anonymous gift" }
         guard let purchasers, !purchasers.isEmpty else { return purchaser_name ?? "a friend" }
         return purchasers.map { "\($0.name) (\($0.quantity))" }.joined(separator: ", ")
     }

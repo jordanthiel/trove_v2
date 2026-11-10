@@ -5,6 +5,7 @@ struct CreateEventView: View {
     @Environment(\.dismiss) private var dismiss
     @State private var name = ""
     @State private var date = Date()
+    @State private var anonymousPurchases = false
     @State private var busy = false
     @State private var error: String?
     @State private var created: RegistryEvent?
@@ -30,6 +31,7 @@ struct CreateEventView: View {
                             TextField("Event name", text: $name).accessibilityIdentifier("event.name")
                             DatePicker("Event date", selection: $date, in: Calendar.current.startOfDay(for: Date())..., displayedComponents: .date)
                         }
+                        PurchasePrivacySection(anonymous: $anonymousPurchases)
                         Section {
                             Text("You’ll get a six-character code to share. Everyone who joins can share wish lists and coordinate gifts.")
                             Text("Purchase details reveal after the event date in \(TimeZone.current.identifier). Lists linked to several events reveal after the last one.")
@@ -47,7 +49,7 @@ struct CreateEventView: View {
             defer { busy = false }
             do {
                 let before = Set(store.events.map(\.id))
-                try await store.createEvent(name: name, date: date)
+                try await store.createEvent(name: name, date: date, anonymousPurchases: anonymousPurchases)
                 created = store.events.first { !before.contains($0.id) }
             } catch { self.error = error.localizedDescription }
         }
@@ -82,6 +84,8 @@ struct JoinEventView: View {
     }
 }
 struct CreateListView: View {
+    let list: WishList?
+    init(list: WishList? = nil) { self.list = list; _name = State(initialValue: list?.name ?? "") }
     @EnvironmentObject var store: TroveStore
     @Environment(\.dismiss) private var dismiss
     @State private var name = ""
@@ -93,12 +97,12 @@ struct CreateListView: View {
                 Section("Make it yours") { TextField("List name", text: $name).accessibilityIdentifier("list.name") }
                 Section { Text("Try “Things I’d love” or “Birthday wishes”. Your list can stay private or be shared across several events.").font(.subheadline).foregroundStyle(TroveStyle.muted) }
                 Section {
-                    PrimaryButton(title: "Create wish list", icon: "gift", busy: busy) {
+                    PrimaryButton(title: list == nil ? "Create wish list" : "Save list name", icon: list == nil ? "gift" : "checkmark", busy: busy) {
                         busy = true
-                        Task { defer { busy = false }; do { try await store.createList(name: name); dismiss() } catch { self.error = error.localizedDescription } }
+                        Task { defer { busy = false }; do { if let list { try await store.renameList(list, name: name) } else { try await store.createList(name: name) }; dismiss() } catch { self.error = error.localizedDescription } }
                     }.disabled(name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || name.count > 120).listRowBackground(Color.clear)
                 }
-            }.scrollContentBackground(.hidden).background(TroveStyle.cream).navigationTitle("New wish list").navigationBarTitleDisplayMode(.inline)
+            }.scrollContentBackground(.hidden).background(TroveStyle.cream).navigationTitle(list == nil ? "New wish list" : "Edit wish list").navigationBarTitleDisplayMode(.inline)
                 .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() }.disabled(busy) } }.errorAlert($error)
         }.interactiveDismissDisabled(busy)
     }
@@ -114,6 +118,7 @@ struct ItemEditorView: View {
     @State private var price: String
     @State private var imageURL: String
     @State private var quantity: Int
+    @State private var favorite: Bool
     @State private var lastImportedLink: String
     @State private var importing = false
     @State private var importMessage: String?
@@ -130,6 +135,7 @@ struct ItemEditorView: View {
         _price = State(initialValue: item?.price.map { NSDecimalNumber(decimal: $0).stringValue } ?? "")
         _imageURL = State(initialValue: item?.image_url ?? "")
         _quantity = State(initialValue: item?.requestedQuantity ?? 1)
+        _favorite = State(initialValue: item?.is_favorite ?? false)
         _lastImportedLink = State(initialValue: item?.link ?? "")
     }
     var body: some View {
@@ -164,6 +170,7 @@ struct ItemEditorView: View {
                 Section("Your wish") {
                     TextField("Item name", text: userField($name)).accessibilityIdentifier("item.name")
                     TextField("Price per item in USD (optional)", text: userField($price)).keyboardType(.decimalPad)
+                    Toggle("Favorite wish", systemImage: "star.fill", isOn: $favorite)
                     Stepper("Quantity wanted: \(quantity)", value: $quantity, in: 1...999)
                     if item != nil { Text("Quantities can be increased at any time. Reductions are available after all shared events have passed.").font(.caption).foregroundStyle(TroveStyle.muted) }
                 }
@@ -177,7 +184,7 @@ struct ItemEditorView: View {
                             defer { busy = false }
                             do {
                                 try await store.saveItem(list: list, existing: item, name: name, notes: notes,
-                                    link: link.trimmingCharacters(in: .whitespacesAndNewlines), price: price, imageURL: imageURL, quantity: quantity)
+                                    link: link.trimmingCharacters(in: .whitespacesAndNewlines), price: price, imageURL: imageURL, quantity: quantity, favorite: favorite)
                                 dismiss()
                             } catch { self.error = error.localizedDescription }
                         }
@@ -288,6 +295,53 @@ struct ShareListsView: View {
             }.scrollContentBackground(.hidden).background(TroveStyle.cream).navigationTitle("Share your wishes").navigationBarTitleDisplayMode(.inline)
                 .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() }.disabled(busy) } }.errorAlert($error)
                 .sheet(isPresented: $newList) { CreateListView() }
+        }.interactiveDismissDisabled(busy)
+    }
+}
+
+
+struct PurchasePrivacySection: View {
+    @Binding var anonymous: Bool
+    var body: some View {
+        Section {
+            Toggle("Anonymous purchases", isOn: $anonymous)
+        } header: {
+            Text("Purchase privacy")
+        } footer: {
+            Text("Guests still see how many items have been purchased. Buyer names stay hidden for lists shared with any event that enables this setting.")
+        }
+    }
+}
+
+struct EventSettingsView: View {
+    @EnvironmentObject var store: TroveStore
+    @Environment(\.dismiss) private var dismiss
+    let event: RegistryEvent
+    @State private var anonymous: Bool
+    @State private var busy = false
+    @State private var error: String?
+    init(event: RegistryEvent) {
+        self.event = event
+        _anonymous = State(initialValue: event.anonymous_purchases ?? false)
+    }
+    var body: some View {
+        NavigationStack {
+            Form {
+                PurchasePrivacySection(anonymous: $anonymous)
+                Section {
+                    PrimaryButton(title: "Save settings", icon: "checkmark", busy: busy) {
+                        busy = true
+                        Task {
+                            defer { busy = false }
+                            do { try await store.setPurchasePrivacy(event, anonymous: anonymous); dismiss() }
+                            catch { self.error = error.localizedDescription }
+                        }
+                    }.disabled(busy).listRowBackground(Color.clear)
+                }
+            }.scrollContentBackground(.hidden).background(TroveStyle.cream)
+                .navigationTitle("Event settings").navigationBarTitleDisplayMode(.inline)
+                .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() }.disabled(busy) } }
+                .errorAlert($error)
         }.interactiveDismissDisabled(busy)
     }
 }

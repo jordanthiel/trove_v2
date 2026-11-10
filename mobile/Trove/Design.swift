@@ -79,7 +79,7 @@ struct WishListCard: View {
                 .frame(width: 56, height: 56).background(TroveStyle.cream, in: RoundedRectangle(cornerRadius: 16))
             VStack(alignment: .leading, spacing: 6) {
                 Text(list.name).font(.headline).foregroundStyle(TroveStyle.ink)
-                Text("\(owner) · \(itemCount) \(itemCount == 1 ? "item" : "items")").font(.caption).foregroundStyle(TroveStyle.muted)
+                Text("Created by \(owner) · \(itemCount) \(itemCount == 1 ? "item" : "items")").font(.caption).foregroundStyle(TroveStyle.muted)
                 if eventCount > 0 { Text("Shared in \(eventCount) \(eventCount == 1 ? "event" : "events")").font(.caption2).foregroundStyle(TroveStyle.green) }
             }
             Spacer(minLength: 0)

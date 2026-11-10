@@ -6,6 +6,7 @@ struct EventDetailView: View {
     let event: RegistryEvent
     @State private var sharing = false
     @State private var removing = false
+    @State private var settings = false
     @State private var busy = false
     @State private var error: String?
     var current: RegistryEvent { store.events.first { $0.id == event.id } ?? event }
@@ -33,13 +34,19 @@ struct EventDetailView: View {
                 if store.lists(for: current).isEmpty { EmptyCard(icon: "gift", title: "The wishes are on their way", message: "Share a wish list here, and invite others to add theirs.") }
                 ForEach(store.lists(for: current)) { list in
                     NavigationLink { ListDetailView(list: list) } label: {
-                        WishListCard(list: list, owner: list.user_id == store.userID ? "You" : store.name(for: list.user_id), itemCount: store.items(for: list).count, eventCount: store.events(for: list).count)
+                        WishListCard(list: list, owner: store.name(for: list.user_id), itemCount: store.items(for: list).count, eventCount: store.events(for: list).count)
                     }.buttonStyle(.plain)
                 }
                 Button(current.owner_id == store.userID ? "Delete event" : "Leave event", role: .destructive) { removing = true }
                     .font(.subheadline).frame(maxWidth: .infinity).padding(.top, 10).disabled(busy)
             }.padding(22)
         }.navigationTitle("Celebration").navigationBarTitleDisplayMode(.inline).troveScreen().refreshable { await store.reload() }
+            .toolbar {
+                if current.owner_id == store.userID {
+                    Button("Event settings", systemImage: "gearshape") { settings = true }
+                }
+            }
+            .sheet(isPresented: $settings) { EventSettingsView(event: current) }
             .sheet(isPresented: $sharing) { ShareListsView(event: current) }
             .errorAlert($error)
             .confirmationDialog(current.owner_id == store.userID ? "Delete this event for everyone? Wish lists will be kept." : "Leave this event? Your wish lists will be unshared from it.", isPresented: $removing, titleVisibility: .visible) {
@@ -61,19 +68,23 @@ struct ListDetailView: View {
     @Environment(\.dismiss) private var dismiss
     let list: WishList
     @State private var adding = false
+    @State private var renaming = false
     @State private var claiming: GiftItem?
     @State private var editing: GiftItem?
     @State private var sharing = false
     @State private var deleting = false
     @State private var error: String?
     @State private var workingID: UUID?
-    var owned: Bool { list.user_id == store.userID }
+    var currentList: WishList { store.lists.first { $0.id == list.id } ?? list }
+    var owned: Bool { currentList.user_id == store.userID }
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
                 Text(owned ? "A few things you’d love." : "A few things \(store.name(for: list.user_id)) would love.")
                     .font(.subheadline).foregroundStyle(TroveStyle.muted)
                 if owned {
+                    Button("Edit list name", systemImage: "pencil") { renaming = true }
+                        .font(.subheadline.weight(.medium))
                     HStack(alignment: .top, spacing: 12) {
                         Image(systemName: "eye.slash")
                         VStack(alignment: .leading, spacing: 6) {
@@ -98,8 +109,9 @@ struct ListDetailView: View {
                     Button("Delete wish list", role: .destructive) { deleting = true }.font(.subheadline).frame(maxWidth: .infinity).padding(.top, 8)
                 }
             }.padding(22)
-        }.navigationTitle(list.name).troveScreen().refreshable { await store.reload() }
+        }.navigationTitle(currentList.name).troveScreen().refreshable { await store.reload() }
             .toolbar { if owned { Button { adding = true } label: { Image(systemName: "plus") }.accessibilityLabel("Add an item") } }
+            .sheet(isPresented: $renaming) { CreateListView(list: currentList) }
             .sheet(isPresented: $adding) { ItemEditorView(list: list, item: nil) }
             .sheet(item: $claiming) { item in ClaimQuantityView(item: item) }
             .sheet(item: $editing) { item in ItemEditorView(list: list, item: item) }
@@ -131,6 +143,10 @@ struct GiftCard: View {
                 ProductImage(url: item.image_url)
                 VStack(alignment: .leading, spacing: 6) {
                     Text(item.name).font(.headline).foregroundStyle(TroveStyle.ink)
+                    if item.is_favorite == true {
+                        Label("Favorite", systemImage: "star.fill")
+                            .font(.caption.weight(.semibold)).foregroundStyle(TroveStyle.green)
+                    }
                     if let price = item.price { Text(price, format: .currency(code: "USD")).font(.subheadline).foregroundStyle(TroveStyle.green) }
                 }
                 Spacer(minLength: 0)
@@ -155,7 +171,17 @@ struct GiftCard: View {
             if !owned || !item.purchase_hidden {
                 Text("\(item.remainingQuantity) of \(item.requestedQuantity) still available")
                     .font(.subheadline.weight(.semibold)).foregroundStyle(TroveStyle.green)
-                if let buyers = item.purchasers {
+                if item.anonymous_purchases == true {
+                    let anonymousCount = (item.claimed_quantity ?? 0) - item.myQuantity
+                    if anonymousCount > 0 {
+                        Label("Purchased anonymously: \(anonymousCount)", systemImage: "checkmark.circle.fill")
+                            .font(.caption).foregroundStyle(TroveStyle.green)
+                    }
+                    if item.myQuantity > 0 {
+                        Label("You claimed \(item.myQuantity)", systemImage: "checkmark.circle.fill")
+                            .font(.caption).foregroundStyle(TroveStyle.green)
+                    }
+                } else if let buyers = item.purchasers {
                     ForEach(buyers, id: \.user_id) { buyer in
                         Label(buyer.user_id == currentUser ? "You claimed \(buyer.quantity)" : "\(buyer.name) claimed \(buyer.quantity)", systemImage: "checkmark.circle.fill")
                             .font(.caption).foregroundStyle(TroveStyle.green)

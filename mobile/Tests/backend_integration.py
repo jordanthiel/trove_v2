@@ -105,6 +105,26 @@ try:
  assert request('/rest/v1/list_items?id=eq.'+multi['id'],ot,'PATCH',{'quantity':4})[0]==400
  assert request('/rest/v1/list_items?id=eq.'+multi['id'],ot,'PATCH',{'quantity':6})[0]==204
  assert quantity_view(first)['available_quantity']==5
+ # Owners can rename lists and favorite wishes; members can read but not change them.
+ assert request('/rest/v1/lists?id=eq.'+wish['id'],ot,'PATCH',{'name':'Renamed wishes'})[0]==204
+ assert request('/rest/v1/lists?id=eq.'+wish['id'],gt,'PATCH',{'name':'Unauthorized name'})[0]==204
+ assert request('/rest/v1/lists?id=eq.'+wish['id']+'&select=name,user_id',gt)[1]==[{'name':'Renamed wishes','user_id':owner}]
+ assert request('/rest/v1/list_items?id=eq.'+multi['id'],ot,'PATCH',{'is_favorite':True})[0]==204
+ assert request('/rest/v1/list_items?id=eq.'+multi['id'],gt,'PATCH',{'is_favorite':False})[0]==204
+ assert quantity_view(gt)['is_favorite'] is True
+ assert request('/rest/v1/profiles?id=eq.'+owner+'&select=display_name',gt)[1]==[{'display_name':'Owner'}]
+ # An event setting can hide identities while still showing counts and my claim.
+ assert request('/rest/v1/events?id=eq.'+event['id'],gt,'PATCH',{'anonymous_purchases':True})[0]==204
+ assert request('/rest/v1/events?id=eq.'+event['id']+'&select=anonymous_purchases',gt)[1]==[{'anonymous_purchases':False}]
+ assert request('/rest/v1/events?id=eq.'+second['id'],ot,'PATCH',{'anonymous_purchases':True})[0]==204
+ masked=quantity_view(first)
+ assert masked['anonymous_purchases'] and masked['available_quantity']==5 and masked['my_claimed_quantity']==1
+ assert masked['purchasers']==[] and masked['purchased_by_user_id'] is None and masked['purchaser_name'] is None and masked['purchased_at'] is None
+ assert quantity_view(other)['purchasers']==[]
+ assert quantity_view(ot)['claimed_quantity'] is None
+ assert request('/rest/v1/events?id=eq.'+second['id'],ot,'PATCH',{'anonymous_purchases':False})[0]==204
+ assert quantity_view(gt)['purchasers'][0]['name'] in ['Guest','Rival']
+ print('PASS: owner-only settings, renaming and favorites; shared creator name; anonymous purchases retain counts without buyer identities.')
  print('PASS: partial quantities, atomic capacity, multiple buyers, release/change, hidden totals, and raw-claim privacy.')
  status,_=request('/rest/v1/events?id=eq.'+event['id'],ot,'PATCH',{'date':past})
  assert status==204 and single(ot)['purchase_hidden'],'Second upcoming event must preserve the surprise'
@@ -117,6 +137,10 @@ try:
  assert request('/rest/v1/list_items?id=eq.'+multi['id'],method='PATCH',body={'claim_reveal_at':past+'T00:00:00Z'},admin=True)[0]==204
  revealed_multi=quantity_view(ot)
  assert revealed_multi['claimed_quantity']==1 and revealed_multi['available_quantity']==5 and len(revealed_multi['purchasers'])==1
+ assert request('/rest/v1/events?id=eq.'+second['id'],ot,'PATCH',{'anonymous_purchases':True})[0]==204
+ masked_owner=quantity_view(ot)
+ assert masked_owner['claimed_quantity']==1 and masked_owner['available_quantity']==5 and masked_owner['purchasers']==[] and masked_owner['purchaser_name'] is None
+ assert request('/rest/v1/events?id=eq.'+second['id'],ot,'PATCH',{'anonymous_purchases':False})[0]==204
  revealed=single(ot); assert revealed['is_purchased'] and not revealed['purchase_hidden'] and revealed['purchaser_name']
  status,_=request('/rest/v1/rpc/trove_claim_item',winner,'POST',{'p_item_id':item['id'],'p_claim':False})
  assert status==204 and not single(gt)['is_purchased']

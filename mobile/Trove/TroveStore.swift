@@ -18,7 +18,10 @@ final class TroveStore: ObservableObject {
     func name(for id: UUID) -> String { profiles.first { $0.id == id }?.display_name ?? "Member" }
     func events(for list: WishList) -> [RegistryEvent] { events.filter { event in links.contains { $0.event_id == event.id && $0.list_id == list.id } } }
     func lists(for event: RegistryEvent) -> [WishList] { lists.filter { list in links.contains { $0.event_id == event.id && $0.list_id == list.id } } }
-    func items(for list: WishList) -> [GiftItem] { items.filter { $0.list_id == list.id } }
+    func items(for list: WishList) -> [GiftItem] {
+        let matches = items.filter { $0.list_id == list.id }
+        return matches.filter { $0.is_favorite == true } + matches.filter { $0.is_favorite != true }
+    }
     func boot() async {
         defer { starting = false }
         guard client.session != nil else { return }
@@ -33,7 +36,7 @@ final class TroveStore: ObservableObject {
         guard let snapshotUser = userID else { return }
         loading = true; defer { loading = false }
         // Apply one complete snapshot so a failed load doesn't erase visible data.
-        async let eventRows: [RegistryEvent] = client.rows("events", query: "select=id,name,date,sharing_code,owner_id,timezone&order=date.asc")
+        async let eventRows: [RegistryEvent] = client.rows("events", query: "select=id,name,date,sharing_code,owner_id,timezone,anonymous_purchases&order=date.asc")
         async let listRows: [WishList] = client.rows("lists", query: "select=id,user_id,name&order=created_at.desc")
         async let linkRows: [EventList] = client.rows("event_lists", query: "select=event_id,list_id")
         async let profileRows: [Profile] = client.rows("profiles", query: "select=id,display_name")
@@ -43,9 +46,9 @@ final class TroveStore: ObservableObject {
         events = snapshot.0; lists = snapshot.1; links = snapshot.2; profiles = snapshot.3; items = snapshot.4
     }
     func reload() async { do { try await refresh() } catch { self.error = error.localizedDescription } }
-    func createEvent(name: String, date: Date) async throws {
+    func createEvent(name: String, date: Date, anonymousPurchases: Bool) async throws {
         guard let userID else { return }
-        try await client.insert("events", values: ["name": name.trimmingCharacters(in: .whitespacesAndNewlines), "date": RegistryEvent.formatter.string(from: date), "owner_id": userID.uuidString, "timezone": TimeZone.current.identifier])
+        try await client.insert("events", values: ["name": name.trimmingCharacters(in: .whitespacesAndNewlines), "date": RegistryEvent.formatter.string(from: date), "owner_id": userID.uuidString, "timezone": TimeZone.current.identifier, "anonymous_purchases": anonymousPurchases])
         try await refresh()
     }
     func join(code: String) async throws {
@@ -60,6 +63,14 @@ final class TroveStore: ObservableObject {
         try await client.insert("lists", values: ["name": name.trimmingCharacters(in: .whitespacesAndNewlines), "user_id": userID.uuidString])
         try await refresh()
     }
+    func renameList(_ list: WishList, name: String) async throws {
+        try await client.update("lists", id: list.id, values: ["name": name.trimmingCharacters(in: .whitespacesAndNewlines)])
+        try await refresh()
+    }
+    func setPurchasePrivacy(_ event: RegistryEvent, anonymous: Bool) async throws {
+        try await client.update("events", id: event.id, values: ["anonymous_purchases": anonymous])
+        try await refresh()
+    }
     func share(_ list: WishList, in event: RegistryEvent, enabled: Bool) async throws {
         if enabled {
             try await client.insert("event_lists", values: ["event_id": event.id.uuidString, "list_id": list.id.uuidString])
@@ -68,7 +79,7 @@ final class TroveStore: ObservableObject {
         }
         try await refresh()
     }
-    func saveItem(list: WishList, existing: GiftItem?, name: String, notes: String, link: String, price: String, imageURL: String, quantity: Int) async throws {
+    func saveItem(list: WishList, existing: GiftItem?, name: String, notes: String, link: String, price: String, imageURL: String, quantity: Int, favorite: Bool) async throws {
         guard (1...999).contains(quantity) else { throw APIError(message: "Choose a quantity from 1 to 999.") }
         let input = link.trimmingCharacters(in: .whitespacesAndNewlines)
         let normalizedLink = ProductLink.extract(input)
@@ -77,6 +88,7 @@ final class TroveStore: ObservableObject {
         }
         var values: [String: Any] = ["name": name.trimmingCharacters(in: .whitespacesAndNewlines), "description": notes.isEmpty ? NSNull() : notes as Any, "link": normalizedLink.map { $0 as Any } ?? NSNull()]
         values["quantity"] = quantity
+        values["is_favorite"] = favorite
         values["image_url"] = imageURL.isEmpty ? NSNull() : imageURL as Any
         let normalizedPrice = price.trimmingCharacters(in: .whitespacesAndNewlines)
         if normalizedPrice.isEmpty { values["price"] = NSNull() }
