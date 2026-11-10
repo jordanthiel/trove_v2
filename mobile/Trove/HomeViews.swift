@@ -121,6 +121,8 @@ struct ThankYouView: View {
     }
 }
 struct AccountView: View {
+    @EnvironmentObject private var notifications: ListNotifications
+    @Environment(\.openURL) private var openURL
     @EnvironmentObject var store: TroveStore
     @State private var signingOut = false
     var body: some View {
@@ -133,6 +135,19 @@ struct AccountView: View {
                     Label("A surprise worth keeping", systemImage: "eye.slash").font(.headline)
                     Text("Friends can see claimed gifts to avoid duplicates. You can’t see who bought your gifts—or whether they’re claimed—until the day after the last event linked to that list, in each event’s time zone.").font(.subheadline).foregroundStyle(TroveStyle.muted).lineSpacing(4)
                     Text("Claims apply to an item across all events sharing its list.").font(.caption).foregroundStyle(TroveStyle.green)
+                }.padding(24).background(.white, in: RoundedRectangle(cornerRadius: 22))
+                VStack(alignment: .leading, spacing: 10) {
+                    Toggle("List notifications", isOn: Binding(
+                        get: { notifications.enabled },
+                        set: { value in Task { await notifications.setEnabled(value) } }
+                    )).disabled(notifications.busy)
+                    Text("Get updates on this device for new wishes on lists shared in your events. Several additions may arrive together.")
+                        .font(.caption).foregroundStyle(TroveStyle.muted)
+                    if notifications.permissionBlocked {
+                        Button("Allow notifications in iOS Settings") {
+                            if let url = URL(string: UIApplication.openSettingsURLString) { openURL(url) }
+                        }.font(.subheadline)
+                    }
                 }.padding(24).background(.white, in: RoundedRectangle(cornerRadius: 22))
                 Button("Sign out", role: .destructive) { signingOut = true }.font(.headline).padding()
             }.padding(22).frame(maxWidth: .infinity)

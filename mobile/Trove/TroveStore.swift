@@ -123,6 +123,7 @@ final class TroveStore: ObservableObject {
         try await refresh()
     }
     func signOut() async {
+        await ListNotifications.shared.signOut()
         await client.signOut(); userID = nil; email = ""; events = []; lists = []; links = []; profiles = []; items = []; error = nil
     }
 }

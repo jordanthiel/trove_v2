@@ -2,6 +2,7 @@ import SwiftUI
 
 @main
 struct TroveApp: App {
+    @UIApplicationDelegateAdaptor(TroveAppDelegate.self) private var appDelegate
     @StateObject private var store = TroveStore()
     var body: some Scene {
         WindowGroup {
@@ -31,6 +32,9 @@ struct RootView: View {
     }
 }
 struct MainTabs: View {
+    @EnvironmentObject private var store: TroveStore
+    @Environment(\.scenePhase) private var phase
+    @StateObject private var notifications = ListNotifications.shared
     var body: some View {
         TabView {
             NavigationStack { HomeView() }.tabItem { Label("Home", systemImage: "house") }
@@ -39,6 +43,18 @@ struct MainTabs: View {
             NavigationStack { ThankYouView() }.tabItem { Label("Thank you", systemImage: "heart.text.square") }
             NavigationStack { AccountView() }.tabItem { Label("Account", systemImage: "person.crop.circle") }
         }.toolbarBackground(.white, for: .tabBar)
+            .environmentObject(notifications)
+            .task(id: store.userID) { await notifications.activate(store.userID) }
+            .onChange(of: phase) { _, value in
+                if value == .active { Task { await notifications.synchronize() } }
+            }
+            .alert("Get notified about new wishes?", isPresented: $notifications.showOffer) {
+                Button("Turn on") { Task { await notifications.setEnabled(true) } }
+                Button("Leave off", role: .cancel) { notifications.leaveOff() }
+            } message: {
+                Text("Get an alert when someone adds wishes to a list shared in one of your events. Additions made close together arrive in one alert. You can change this in Account.")
+            }
+            .errorAlert($notifications.error)
     }
 }
 struct AuthView: View {

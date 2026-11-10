@@ -148,6 +148,50 @@ try:
  assert status==400,'No new claims after a member\'s events end'
  status,_=request('/rest/v1/rpc/join_event_by_code',gt,'POST',{'p_sharing_code':event['sharing_code'],'p_user_id':outsider})
  assert status==403
+ # Opt-in is tied to the authenticated install. Multiple shared events do not duplicate alerts.
+ def db(sql):
+  return subprocess.run(['docker','exec','supabase_db_shared-apps','psql','-X','-v','ON_ERROR_STOP=1','-U','postgres','-Atc',sql],capture_output=True,text=True,check=True).stdout.strip()
+ device=str(uuid.uuid4()); token=uuid.uuid4().hex*2
+ def enroll(access,device_id,push_token):
+  return request('/rest/v1/rpc/trove_set_list_notifications',access,'POST',{'p_id':device_id,'p_token':push_token,'p_environment':'development'})
+ enrollment=enroll(gt,device,token)
+ assert enrollment[0]==204,enrollment
+ assert enroll(ot,str(uuid.uuid4()),uuid.uuid4().hex*2)[0]==204
+ assert enroll(xt,str(uuid.uuid4()),uuid.uuid4().hex*2)[0]==204
+ assert request('/rest/v1/rpc/join_event_by_code',gt,'POST',{'p_sharing_code':second['sharing_code'],'p_user_id':guest})[1]['success']
+ def add_wish():
+  assert request('/rest/v1/list_items',ot,'POST',{'list_id':wish['id'],'name':'Batch test gift'})[0]==201
+ for _ in range(5): add_wish()
+ rows=json.loads(db("SELECT json_agg(json_build_object('device',device_id,'count',item_count,'delay',extract(epoch from due_at-first_at))) FROM trove_private.push_batches WHERE list_id='"+wish['id']+"'"))
+ assert len(rows)==1 and rows[0]['device']==device and rows[0]['count']==5 and 300<=rows[0]['delay']<900, rows
+ # Continuous additions cannot defer the original batch by more than 15 minutes.
+ db("UPDATE trove_private.push_batches SET first_at=now()-interval '14 minutes' WHERE device_id='"+device+"'")
+ add_wish()
+ assert db("SELECT due_at=first_at+interval '15 minutes' FROM trove_private.push_batches WHERE device_id='"+device+"'")=='t'
+ assert request('/rest/v1/rpc/trove_take_list_notifications',gt,'POST',{})[0]==403
+ status,premature=request('/rest/v1/rpc/trove_take_list_notifications',method='POST',body={},admin=True)
+ assert status==200 and not any(row['token']==token for row in premature),(status,premature)
+ db("UPDATE trove_private.push_batches SET due_at=now() WHERE device_id='"+device+"'")
+ status,due=request('/rest/v1/rpc/trove_take_list_notifications',method='POST',body={},admin=True)
+ assert status==200,(status,due)
+ leased=next(row for row in due if row['token']==token)
+ assert leased['item_count']==6 and leased['list_name']=='Renamed wishes'
+ status,repeated=request('/rest/v1/rpc/trove_take_list_notifications',method='POST',body={},admin=True)
+ assert status==200 and not any(row['token']==token for row in repeated)
+ assert request('/rest/v1/rpc/trove_finish_list_notification',method='POST',body={'p_id':leased['id'],'p_lease':leased['lease_id'],'p_result':'sent','p_token':token},admin=True)[0]==204
+ assert db("SELECT count(*) FROM trove_private.push_batches WHERE device_id='"+device+"'")=='0'
+ add_wish()
+ assert enroll(gt,device,None)[0]==204
+ assert db("SELECT count(*) FROM trove_private.push_batches WHERE device_id='"+device+"'")=='0'
+ enrollment=enroll(gt,device,token)
+ assert enrollment[0]==204,enrollment
+ add_wish()
+ for e in (event,second):
+  assert request('/rest/v1/event_members?event_id=eq.'+e['id']+'&user_id=eq.'+guest,gt,'DELETE')[0]==204
+ db("UPDATE trove_private.push_batches SET due_at=now() WHERE device_id='"+device+"'")
+ status,departed=request('/rest/v1/rpc/trove_take_list_notifications',method='POST',body={},admin=True)
+ assert status==200 and not any(row['token']==token for row in departed)
+ print('PASS: opt-in only, multi-event deduplication, batching window and cap, worker lease, opt-out, and membership recheck.')
  print('PASS: Auth, generated event codes, code-only join, multi-event lists, concurrent claims, protected purchase fields, guest edit isolation, date reveal, and undo permissions.')
 finally:
  for uid in created:

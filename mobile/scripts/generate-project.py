@@ -31,6 +31,8 @@ for mode in ['Debug','Release']:
  TARGETED_DEVICE_FAMILY = "1,2"; CODE_SIGN_STYLE = Automatic;
  MARKETING_VERSION = 1.2.0; CURRENT_PROJECT_VERSION = 2026110201;
  DEVELOPMENT_TEAM = GYURRL7F4B;
+ CODE_SIGN_ENTITLEMENTS = Trove/Trove.entitlements;
+ TROVE_PUSH_ENVIRONMENT = {'development' if mode=='Debug' else 'production'};
  ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
  SWIFT_VERSION = 5.0; SWIFT_STRICT_CONCURRENCY = targeted;
  SWIFT_OPTIMIZATION_LEVEL = { '"-Onone"' if mode=='Debug' else '"-O"' };
