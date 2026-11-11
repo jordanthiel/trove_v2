@@ -37,7 +37,7 @@ final class TroveStore: ObservableObject {
         loading = true; defer { loading = false }
         // Apply one complete snapshot so a failed load doesn't erase visible data.
         async let eventRows: [RegistryEvent] = client.rows("events", query: "select=id,name,date,sharing_code,owner_id,timezone,anonymous_purchases&order=date.asc")
-        async let listRows: [WishList] = client.rows("lists", query: "select=id,user_id,name&order=created_at.desc")
+        async let listRows: [WishList] = client.rows("lists", query: "select=id,user_id,name,for_someone_else&order=created_at.desc")
         async let linkRows: [EventList] = client.rows("event_lists", query: "select=event_id,list_id")
         async let profileRows: [Profile] = client.rows("profiles", query: "select=id,display_name")
         async let itemRows: [GiftItem] = client.rows("list_items_with_privacy", query: "select=*&order=created_at.asc")
@@ -58,13 +58,13 @@ final class TroveStore: ObservableObject {
         guard result.success || result.error == "Already a member" else { throw APIError(message: result.error ?? "Unable to join this event.") }
         try await refresh()
     }
-    func createList(name: String) async throws {
+    func createList(name: String, forSomeoneElse: Bool) async throws {
         guard let userID else { return }
-        try await client.insert("lists", values: ["name": name.trimmingCharacters(in: .whitespacesAndNewlines), "user_id": userID.uuidString])
+        try await client.insert("lists", values: ["name": name.trimmingCharacters(in: .whitespacesAndNewlines), "user_id": userID.uuidString, "for_someone_else": forSomeoneElse])
         try await refresh()
     }
-    func renameList(_ list: WishList, name: String) async throws {
-        try await client.update("lists", id: list.id, values: ["name": name.trimmingCharacters(in: .whitespacesAndNewlines)])
+    func updateList(_ list: WishList, name: String, forSomeoneElse: Bool) async throws {
+        try await client.update("lists", id: list.id, values: ["name": name.trimmingCharacters(in: .whitespacesAndNewlines), "for_someone_else": forSomeoneElse])
         try await refresh()
     }
     func setPurchasePrivacy(_ event: RegistryEvent, anonymous: Bool) async throws {

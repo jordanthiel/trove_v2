@@ -51,7 +51,7 @@ struct HomeView: View {
                 }
                 HStack(alignment: .top, spacing: 12) {
                     Image(systemName: "eye.slash").font(.title3)
-                    Text("Keep the surprise. Your gift claims stay hidden until all events linked to your list have passed.").font(.caption).lineSpacing(3)
+                    Text("Keep the surprise. Claims on personal lists stay hidden until all linked events have passed.").font(.caption).lineSpacing(3)
                 }.foregroundStyle(TroveStyle.muted).padding(.vertical, 4)
             }.padding(22).foregroundStyle(TroveStyle.ink)
         }.troveScreen().toolbar(.hidden, for: .navigationBar).refreshable { await store.reload() }
@@ -133,7 +133,7 @@ struct AccountView: View {
                 VStack(spacing: 6) { Text(store.displayName).font(.title2.weight(.semibold)); Text(store.email).font(.subheadline).foregroundStyle(TroveStyle.muted) }
                 VStack(alignment: .leading, spacing: 14) {
                     Label("A surprise worth keeping", systemImage: "eye.slash").font(.headline)
-                    Text("Friends can see claimed gifts to avoid duplicates. You can’t see who bought your gifts—or whether they’re claimed—until the day after the last event linked to that list, in each event’s time zone.").font(.subheadline).foregroundStyle(TroveStyle.muted).lineSpacing(4)
+                    Text("Friends can see claimed gifts to avoid duplicates. Claims on your personal lists stay hidden until after the last linked event. For lists you manage for someone else, you can see claimed quantities right away.").font(.subheadline).foregroundStyle(TroveStyle.muted).lineSpacing(4)
                     Text("Claims apply to an item across all events sharing its list.").font(.caption).foregroundStyle(TroveStyle.green)
                 }.padding(24).background(.white, in: RoundedRectangle(cornerRadius: 22))
                 VStack(alignment: .leading, spacing: 10) {

@@ -80,16 +80,16 @@ struct ListDetailView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
-                Text(owned ? "A few things you’d love." : "A few things \(store.name(for: list.user_id)) would love.")
+                Text(owned ? (currentList.for_someone_else == true ? "A wish list you manage for someone else." : "A few things you’d love.") : "A few things \(store.name(for: list.user_id)) would love.")
                     .font(.subheadline).foregroundStyle(TroveStyle.muted)
                 if owned {
-                    Button("Edit list name", systemImage: "pencil") { renaming = true }
+                    Button("Edit wish list", systemImage: "pencil") { renaming = true }
                         .font(.subheadline.weight(.medium))
                     HStack(alignment: .top, spacing: 12) {
-                        Image(systemName: "eye.slash")
+                        Image(systemName: currentList.for_someone_else == true ? "eye" : "eye.slash")
                         VStack(alignment: .leading, spacing: 6) {
-                            Text("Let it be a surprise").font(.subheadline.weight(.semibold))
-                            Text("Purchase details stay hidden until every linked event has passed. Friends see claims across all shared events.")
+                            Text(currentList.for_someone_else == true ? "For someone else" : "Let it be a surprise").font(.subheadline.weight(.semibold))
+                            Text(currentList.for_someone_else == true ? "You can see claimed quantities as they’re updated. Buyer names still follow the event’s privacy settings." : "Purchase details stay hidden until every linked event has passed. Friends see claims across all shared events.")
                                 .font(.caption).lineSpacing(3)
                         }
                     }.foregroundStyle(TroveStyle.green).padding(18).background(.white, in: RoundedRectangle(cornerRadius: 20))
@@ -181,11 +181,14 @@ struct GiftCard: View {
                         Label("You claimed \(item.myQuantity)", systemImage: "checkmark.circle.fill")
                             .font(.caption).foregroundStyle(TroveStyle.green)
                     }
-                } else if let buyers = item.purchasers {
+                } else if let buyers = item.purchasers, !buyers.isEmpty {
                     ForEach(buyers, id: \.user_id) { buyer in
                         Label(buyer.user_id == currentUser ? "You claimed \(buyer.quantity)" : "\(buyer.name) claimed \(buyer.quantity)", systemImage: "checkmark.circle.fill")
                             .font(.caption).foregroundStyle(TroveStyle.green)
                     }
+                } else if let count = item.claimed_quantity, count > 0 {
+                    Label("Claimed: \(count)", systemImage: "checkmark.circle.fill")
+                        .font(.caption).foregroundStyle(TroveStyle.green)
                 }
             }
             if !owned {

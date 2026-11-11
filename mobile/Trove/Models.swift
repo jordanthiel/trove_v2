@@ -22,7 +22,7 @@ struct RegistryEvent: Codable, Identifiable, Hashable {
         f.locale = Locale(identifier: "en_US_POSIX"); f.dateFormat = "yyyy-MM-dd"; return f
     }
 }
-struct WishList: Codable, Identifiable, Hashable { let id: UUID; let user_id: UUID; var name: String }
+struct WishList: Codable, Identifiable, Hashable { let id: UUID; let user_id: UUID; var name: String; var for_someone_else: Bool? }
 struct EventList: Codable { let event_id: UUID; let list_id: UUID }
 struct GiftPurchaser: Codable { let user_id: UUID; let name: String; let quantity: Int }
 struct GiftItem: Codable, Identifiable {

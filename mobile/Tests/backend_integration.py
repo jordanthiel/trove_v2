@@ -113,6 +113,18 @@ try:
  assert request('/rest/v1/list_items?id=eq.'+multi['id'],gt,'PATCH',{'is_favorite':False})[0]==204
  assert quantity_view(gt)['is_favorite'] is True
  assert request('/rest/v1/profiles?id=eq.'+owner+'&select=display_name',gt)[1]==[{'display_name':'Owner'}]
+ # List creators may see counts early for a managed list, but never early buyer details.
+ assert request('/rest/v1/lists?id=eq.'+wish['id'],gt,'PATCH',{'for_someone_else':True})[0]==204
+ assert quantity_view(ot)['purchase_hidden']
+ assert request('/rest/v1/lists?id=eq.'+wish['id'],ot,'PATCH',{'for_someone_else':True})[0]==204
+ managed=quantity_view(ot)
+ assert not managed['purchase_hidden'] and managed['claimed_quantity']==1 and managed['available_quantity']==5
+ assert not managed['is_purchased'] and managed['purchased_by_user_id'] is None and managed['purchaser_name'] is None and managed['purchased_at'] is None and managed['purchasers']==[]
+ assert request('/rest/v1/lists?id=eq.'+wish['id'],ot,'PATCH',{'for_someone_else':False})[0]==204
+ assert quantity_view(ot)['purchase_hidden'] and quantity_view(ot)['claimed_quantity'] is None
+ managed_list=insert('lists',ot,{'name':'Managed wishes','user_id':owner,'for_someone_else':True})
+ assert managed_list['for_someone_else'] is True
+ print('PASS: managed list creation, owner-only setting, immediate counts, preserved buyer privacy, and restored surprise mode.')
  # An event setting can hide identities while still showing counts and my claim.
  assert request('/rest/v1/events?id=eq.'+event['id'],gt,'PATCH',{'anonymous_purchases':True})[0]==204
  assert request('/rest/v1/events?id=eq.'+event['id']+'&select=anonymous_purchases',gt)[1]==[{'anonymous_purchases':False}]

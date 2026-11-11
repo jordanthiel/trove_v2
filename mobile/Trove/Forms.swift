@@ -85,7 +85,12 @@ struct JoinEventView: View {
 }
 struct CreateListView: View {
     let list: WishList?
-    init(list: WishList? = nil) { self.list = list; _name = State(initialValue: list?.name ?? "") }
+    init(list: WishList? = nil) {
+        self.list = list
+        _name = State(initialValue: list?.name ?? "")
+        _forSomeoneElse = State(initialValue: list?.for_someone_else ?? false)
+    }
+    @State private var forSomeoneElse: Bool
     @EnvironmentObject var store: TroveStore
     @Environment(\.dismiss) private var dismiss
     @State private var name = ""
@@ -95,11 +100,16 @@ struct CreateListView: View {
         NavigationStack {
             Form {
                 Section("Make it yours") { TextField("List name", text: $name).accessibilityIdentifier("list.name") }
+                Section {
+                    Toggle("For someone else", isOn: $forSomeoneElse)
+                } footer: {
+                    Text("Use this for a child or someone whose list you manage. You’ll see what’s been claimed right away. Buyer names still follow the event’s privacy settings.")
+                }
                 Section { Text("Try “Things I’d love” or “Birthday wishes”. Your list can stay private or be shared across several events.").font(.subheadline).foregroundStyle(TroveStyle.muted) }
                 Section {
-                    PrimaryButton(title: list == nil ? "Create wish list" : "Save list name", icon: list == nil ? "gift" : "checkmark", busy: busy) {
+                    PrimaryButton(title: list == nil ? "Create wish list" : "Save changes", icon: list == nil ? "gift" : "checkmark", busy: busy) {
                         busy = true
-                        Task { defer { busy = false }; do { if let list { try await store.renameList(list, name: name) } else { try await store.createList(name: name) }; dismiss() } catch { self.error = error.localizedDescription } }
+                        Task { defer { busy = false }; do { if let list { try await store.updateList(list, name: name, forSomeoneElse: forSomeoneElse) } else { try await store.createList(name: name, forSomeoneElse: forSomeoneElse) }; dismiss() } catch { self.error = error.localizedDescription } }
                     }.disabled(name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || name.count > 120).listRowBackground(Color.clear)
                 }
             }.scrollContentBackground(.hidden).background(TroveStyle.cream).navigationTitle(list == nil ? "New wish list" : "Edit wish list").navigationBarTitleDisplayMode(.inline)
